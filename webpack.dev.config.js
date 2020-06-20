@@ -5,19 +5,24 @@ const CleanWebpackPlugin = require('clean-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const WriteFilePlugin = require('write-file-webpack-plugin');
-const env = require('./utils/env');
 
 // load the secrets
 const alias = {};
-const secretsPath = path.join(__dirname, (`secrets.${env.NODE_ENV}.js`));
+const secretsPath = path.join(__dirname, ('secrets.development.js'));
 const fileExtensions = ['jpg', 'jpeg', 'png', 'gif', 'eot', 'otf', 'svg', 'ttf', 'woff', 'woff2'];
 
 if (fileSystem.existsSync(secretsPath)) {
   alias.secrets = secretsPath;
 }
 
-const options = {
+require('@babel/register');
+
+const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
+
+const config = {
+  mode: 'development',
   devtool: '#eval-source-map',
+
   entry: {
     contentScript: path.join(__dirname, 'src', 'js', 'contentScript.js'),
     popup: path.join(__dirname, 'src', 'js', 'popup.js'),
@@ -28,24 +33,23 @@ const options = {
     path: path.join(__dirname, 'build'),
     filename: '[name].bundle.js',
   },
+
+  optimization: {
+    minimizer: [new UglifyJsPlugin({
+      sourceMap: true,
+      uglifyOptions: {
+        warnings: false,
+        mangle: true,
+        ie8: false,
+        keep_fnames: true,
+      },
+    })],
+  },
   module: {
     rules: [
       {
-        test: /\.js$/,
-        exclude: /node_modules/,
-        loader: 'eslint-loader',
-        options: {
-          // eslint options (if necessary)
-        },
-      },
-      {
-        test: /\.css$/,
-        loader: 'style-loader!css-loader',
-        exclude: /node_modules/,
-      },
-      {
-        test: new RegExp(`\.(${fileExtensions.join('|')})$`), // eslint-disable-line
-        loader: 'file-loader?name=[name].[ext]',
+        test: /\.(js|jsx)$/,
+        loader: 'babel-loader',
         exclude: /node_modules/,
       },
       {
@@ -54,35 +58,40 @@ const options = {
         exclude: /node_modules/,
       },
       {
-        test: /\.(js|jsx)$/,
-        loader: 'babel-loader',
+        test: /\.(png|jpe?g|gif)$/i,
+        loader: 'file-loader',
+        options: {
+          name: '[name].[ext]',
+        },
         exclude: /node_modules/,
+      },
+      {
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader'],
       },
     ],
   },
-  resolve: {
-    alias,
-    extensions: fileExtensions.map(extension => (`.${extension}`)).concat(['.jsx', '.js', '.css']),
-  },
+
   plugins: [
     // clean the build folder
     new CleanWebpackPlugin(['build']),
     // expose and write the allowed env vars on the compiled bundle
     new webpack.DefinePlugin({
-      'process.env.NODE_ENV': JSON.stringify(env.NODE_ENV),
+      'process.env.NODE_ENV': JSON.stringify('development'),
     }),
-    new CopyWebpackPlugin([{
-      from: 'src/manifest.json',
-      transform(content, path) { // eslint-disable-line
-        // generates the manifest file using the package.json informations
-        return Buffer.from(JSON.stringify({
-          description: process.env.npm_package_description,
-          version: process.env.npm_package_version,
-          ...JSON.parse(content.toString()),
-        }));
-      },
-    }]),
-    new webpack.optimize.UglifyJsPlugin(),
+    new CopyWebpackPlugin({
+      patterns: [{
+        from: 'src/manifest.json',
+        transform(content, path) { // eslint-disable-line
+          // generates the manifest file using the package.json informations
+          return Buffer.from(JSON.stringify({
+            description: process.env.npm_package_description,
+            version: process.env.npm_package_version,
+            ...JSON.parse(content.toString()),
+          }));
+        },
+      }],
+    }),
     new HtmlWebpackPlugin({
       template: path.join(__dirname, 'src', 'popup.html'),
       filename: 'popup.html',
@@ -100,10 +109,10 @@ const options = {
     }),
     new WriteFilePlugin(),
   ],
+  resolve: {
+    alias,
+    extensions: fileExtensions.map(extension => (`.${extension}`)).concat(['.jsx', '.js', '.css']),
+  },
 };
 
-if (env.NODE_ENV === 'development') {
-  options.devtool = 'cheap-module-eval-source-map';
-}
-
-module.exports = options;
+module.exports = config;

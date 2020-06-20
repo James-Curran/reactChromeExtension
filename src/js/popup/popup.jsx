@@ -1,5 +1,4 @@
 import React from 'react';
-import { hot } from 'react-hot-loader';
 import icon from '../../img/icon-128.png';
 
 function Popup() {
@@ -11,4 +10,4 @@ function Popup() {
   );
 }
 
-export default hot(module)(Popup);
+export default Popup;
